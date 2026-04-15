@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Risiko- und Einsatzanalyse REK</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <link rel="stylesheet" href="css/karte.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- UPLOAD-OVERLAY: erscheint solange keine Einsatzdaten geladen sind  -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<div id="upload-overlay" style="
+  position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;
+  background:linear-gradient(135deg,#1a202c 0%,#2d3748 100%);
+  display:flex;align-items:center;justify-content:center;
+">
+  <div style="
+    background:#fff;border-radius:8px;padding:40px 48px;max-width:480px;width:90%;
+    box-shadow:0 20px 60px rgba(0,0,0,0.4);text-align:center;
+  ">
+    <div style="font-size:15px;font-weight:800;color:#1a1a1a;margin-bottom:4px;">Amt 38</div>
+    <div style="font-size:12px;color:#666;margin-bottom:24px;">Rettungsdienst, Brand- und Bevölkerungsschutz</div>
+
+    <div style="font-size:18px;font-weight:700;color:#1a1a1a;margin-bottom:8px;">
+      Risiko- und Einsatzanalyse REK
+    </div>
+    <div style="font-size:13px;color:#555;margin-bottom:28px;line-height:1.5;">
+      Bitte laden Sie die aktuellen Einsatzdaten aus dem ELS.<br>
+      Die Daten werden ausschließlich lokal im Browser verarbeitet<br>
+      und nicht übertragen.
+    </div>
+
+    <!-- Drop-Zone -->
+    <div id="drop-zone" style="
+      border:2px dashed #cbd5e0;border-radius:6px;padding:28px 20px;
+      margin-bottom:20px;cursor:pointer;transition:all 0.2s;
+      background:#f8fafc;
+    "
+      onclick="document.getElementById('file-input').click()"
+      ondragover="event.preventDefault();this.style.borderColor='#c8102e';this.style.background='#fff5f5'"
+      ondragleave="this.style.borderColor='#cbd5e0';this.style.background='#f8fafc'"
+      ondrop="handleDrop(event)"
+    >
+      <div style="font-size:32px;margin-bottom:8px;">📂</div>
+      <div style="font-weight:600;color:#2d3748;margin-bottom:4px;">Datei hier ablegen</div>
+      <div style="font-size:12px;color:#888;">oder klicken zum Auswählen</div>
+      <div style="font-size:11px;color:#aaa;margin-top:8px;">Unterstützte Formate: .xlsx, .xls, .csv</div>
+    </div>
+
+    <input id="file-input" type="file" accept=".xlsx,.xls,.csv"
+      style="display:none" onchange="handleFileSelect(this.files[0])">
+
+    <div id="upload-status" style="
+      font-size:12px;color:#888;min-height:20px;margin-bottom:12px;
+    "></div>
+
+    <div id="upload-progress" style="display:none;margin-bottom:16px;">
+      <div style="height:4px;background:#e2e8f0;border-radius:2px;overflow:hidden;">
+        <div id="progress-bar" style="height:100%;background:#c8102e;width:0%;transition:width 0.3s;border-radius:2px;"></div>
+      </div>
+    </div>
+
+    <button id="start-btn" onclick="startOhneEinsatzdaten()" style="
+      background:none;border:none;color:#aaa;font-size:11px;
+      cursor:pointer;text-decoration:underline;margin-top:4px;
+    ">
+      Ohne Einsatzdaten starten (eingeschränkte Funktionen)
+    </button>
+
+    <div style="font-size:10px;color:#bbb;margin-top:20px;">
+      Rhein-Erft-Kreis &mdash; Amt 38/2 &mdash; Version 2025
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+</head><body>
+<div id="map"><button id="sideToggle" title="Sidebar ein-/ausblenden">⮞</button></div>
+<div id="side">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding-bottom:8px;">
+  <div style="line-height:1.3;"><div style="font-size:17px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;">Amt 38</div><div style="font-size:12px;font-weight:600;color:#444;margin-top:1px;">Rettungsdienst, Brand-<br>und Bevölkerungsschutz</div></div>
+  <img src="data:image/png;base64,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" style="height:56px;flex-shrink:0;" alt="Rhein-Erft-Kreis">
+</div>
+<hr style="border:none;border-top:1px solid #aaa;margin:4px 0 8px 0;">
+<h3 style="margin-top:0;margin-bottom:6px;">Risiko- und Einsatzanalyse REK</h3>
+
+<!-- Tab-Leiste: Brandschutz / Rettungsdienst / Katastrophenschutz -->
+<div class="tab-bar" role="tablist">
+  <div class="tab-btn active" data-tab="brand" onclick="switchTab('brand')">Brandschutz</div>
+  <div class="tab-btn" data-tab="rett" onclick="switchTab('rett')">Rettungsdienst</div>
+  <div class="tab-btn" data-tab="kat" onclick="switchTab('kat')">Katastrophenschutz</div>
+  <div class="tab-btn" data-tab="quer" onclick="switchTab('quer')">Sonderlagen &amp; Weiteres</div>
+</div>
+
+<!-- ═════════════════ Panel: Brandschutz ═════════════════ -->
+<div class="tab-panel active" id="panel-brand">
+
+<!-- ─────────── Reiter: Isochronen - Brandschutz ─────────── -->
+<details class="section" id="sec-iso">
+<summary>Isochronen</summary>
+<div class="section-body">
+<div style="position:relative;margin-bottom:6px;">
+  <input id="strSearch" type="text" placeholder="Straße suchen… (Enter)" style="width:100%;padding:4px 26px 4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;box-sizing:border-box;">
+  <button id="strClear" title="Löschen" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;color:#888;padding:0;line-height:1;display:none;">✕</button>
+</div>
+<label>Profil: <select id="prof"><option value="LKW">LKW</option><option value="PKW">PKW</option></select></label>
+<div style="margin-top:4px;">Zeitstufen (Min):</div><div id="tboxes"></div>
+<label>Deckkraft: <input type="range" id="op" min="0" max="100" value="35"> <span id="opV">35</span>%</label>
+
+<div style="margin:8px 0 4px;padding:6px;background:#f6f6f6;border-radius:3px;border:1px solid #ddd;">
+  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+    <input type="checkbox" id="showGap" style="margin:0;">
+    <span>Nicht abgedeckte Bereiche markieren</span>
+  </label>
+  <div style="font-size:10.5px;color:#666;margin-top:3px;line-height:1.3;">
+    Färbt Flächen <b>innerhalb der Kommunen aktiver Wachen</b>, die außerhalb der gewählten Isochronen liegen, rot ein.
+  </div>
+</div>
+
+<div style="margin:8px 0 4px;padding:6px;background:#f6f6f6;border-radius:3px;border:1px solid #ddd;">
+  <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;">
+    <input type="checkbox" id="showBorder" style="margin:0;">
+    <span>Einsatzgrenzen bei Überlappung anzeigen</span>
+  </label>
+  <div style="font-size:10.5px;color:#666;margin-top:3px;line-height:1.3;">
+    Wenn sich Isochronen verschiedener Kommunen überlappen, wird die Überlappungsfläche entlang der Mittelsenkrechten zwischen den Wachen geteilt und eingefärbt: jede Hälfte in der Farbe der Kommune, deren Wache näher ist.
+  </div>
+</div>
+
+<div style="margin:6px 0;padding:6px 8px;background:#fff8e6;border-left:3px solid #f0c040;border-radius:2px;font-size:11px;line-height:1.35;">
+  <span style="cursor:pointer;color:#0066cc;text-decoration:underline;" onclick="$('hilfsfristInfo').style.display=$('hilfsfristInfo').style.display==='none'?'block':'none';">ℹ️ Hinweis: Iso ≠ Hilfsfrist (Details ▼)</span>
+  <div id="hilfsfristInfo" style="display:none;margin-top:6px;color:#444;">
+    Die Isochronen zeigen ausschließlich die <b>reine Fahrzeit ab Wachenstandort</b> (OSM-Straßendaten).
+    Sie entsprechen <b>nicht</b> der offiziellen Hilfsfrist (HF1/HF2). Diese beginnt mit der Notrufannahme und umfasst zusätzlich:
+    <ul style="margin:4px 0 4px 16px;padding:0;">
+      <li>Gesprächs-/Dispositionszeit Leitstelle (~60-90 Sek)</li>
+      <li>Ausrückzeit (~60 Sek hauptamtlich, 4-5 Min FF)</li>
+    </ul>
+    Die tatsächliche Hilfsfrist ist daher mehrere Minuten <b>länger</b> als die hier gezeigte Fahrzeit.
+  </div>
+</div>
+</div>
+</details>
+
+<!-- ─────────── Reiter: Wachen - Brandschutz ─────────── -->
+<details class="section" id="sec-wachen">
+<summary>Wachen</summary>
+<div class="section-body">
+<label style="display:block;margin-bottom:6px;"><input type="checkbox" id="shS"> Wachen + Isochronen anzeigen</label>
+<div style="position:relative;margin-bottom:6px;">
+<input id="wSearch" type="text" placeholder="Wache suchen…" style="width:100%;box-sizing:border-box;padding:4px 26px 4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+<button id="wSearchClear" title="Löschen" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;color:#888;padding:0;line-height:1;display:none;">✕</button>
+</div>
+<details id="wDetails"><summary style="cursor:pointer;font-size:12px;margin:4px 0">Einzeln auswählen ▾</summary>
+<div><button onclick="setAllW(true)">Alle</button><button onclick="setAllW(false)">Keine</button></div>
+<div id="wlist" style="max-height:200px;overflow-y:auto;font-size:12px;border:1px solid #ccc;padding:4px"></div>
+</details>
+</div>
+</details>
+
+<!-- ─────────── Reiter: Heatmap - Brandschutz ─────────── -->
+<!-- ─────────── Reiter: Einsätze - Brandschutz ─────────── -->
+<details class="section" id="sec-einsaetze">
+<summary>Einsätze</summary>
+<div class="section-body">
+<!-- Jahre -->
+<div style="margin:4px 0">Jahre: <span id="yrInfo" style="font-size:11px;color:#666"></span>
+<div id="yrlist" style="display:flex;flex-wrap:wrap;gap:6px;margin:4px 0"></div></div>
+
+<!-- Ort -->
+<div style="margin:8px 0 4px">Ort: <span id="foInfo" style="font-size:11px;color:#666">(alle)</span>
+<details id="ortDetails"><summary style="cursor:pointer;font-size:12px;margin:2px 0">Filter setzen ▾</summary>
+<div style="position:relative;margin:4px 0;">
+<input id="ortSearch" type="text" placeholder="Ort suchen…" style="width:100%;box-sizing:border-box;padding:4px 26px 4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+<button id="ortSearchClear" title="Löschen" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;color:#888;padding:0;line-height:1;display:none;">✕</button>
+</div>
+<div><button onclick="setAllOrt(true)">Alle</button><button onclick="setAllOrt(false)">Keine</button></div>
+<div id="folist" style="max-height:140px;overflow-y:auto;font-size:12px;border:1px solid #ccc;padding:4px"></div>
+</details></div>
+
+<!-- Stadtteil -->
+<div style="margin:8px 0 4px">Stadtteil: <span id="fsInfo" style="font-size:11px;color:#666">(alle)</span>
+<details><summary style="cursor:pointer;font-size:12px;margin:2px 0">Filter setzen ▾</summary>
+<div><button onclick="setAllSt(true)">Alle</button><button onclick="setAllSt(false)">Keine</button></div>
+<div id="fslist" style="max-height:140px;overflow-y:auto;font-size:12px;border:1px solid #ccc;padding:4px"></div>
+</details></div>
+
+<!-- Stichwort -->
+<div style="margin:8px 0 4px">Stichwort: <span id="fwInfo" style="font-size:11px;color:#666">(alle)</span>
+<details id="swDetails"><summary style="cursor:pointer;font-size:12px;margin:2px 0">Filter setzen ▾</summary>
+<div style="position:relative;margin:4px 0;">
+<input id="swSearch" type="text" placeholder="Stichwort suchen…" style="width:100%;box-sizing:border-box;padding:4px 26px 4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+<button id="swSearchClear" title="Löschen" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;color:#888;padding:0;line-height:1;display:none;">✕</button>
+</div>
+<div><button onclick="setAllSW(true)">Alle</button><button onclick="setAllSW(false)">Keine</button></div>
+<div id="fwlist" style="max-height:160px;overflow-y:auto;font-size:12px;border:1px solid #ccc;padding:4px"></div>
+</details></div>
+
+<!-- Suchfeld Einsatz-Nr. -->
+<div style="margin:8px 0 4px;position:relative;">
+<input id="nrSearch" type="text" placeholder="Einsatz-Nr. suchen…" autocomplete="off" style="width:100%;box-sizing:border-box;padding:4px 26px 4px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;">
+<button id="nrSearchClear" title="Löschen" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;color:#888;padding:0;line-height:1;display:none;">✕</button>
+<div id="nrSugg" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ccc;border-top:none;border-radius:0 0 3px 3px;max-height:180px;overflow-y:auto;z-index:1000;font-size:12px;box-shadow:0 2px 4px rgba(0,0,0,0.1);"></div>
+</div>
+
+<!-- Ein-/Ausblende-Button -->
+<button id="toggleEins" onclick="toggleEinsaetze()" style="margin:10px 0 4px;width:100%;background:#b80000;color:#fff;padding:6px;border:none;border-radius:3px;cursor:pointer;font-weight:bold;">Einsätze einblenden</button>
+
+<!-- Top 10 -->
+<h3 style="margin:12px 0 4px;font-size:12px;">Top 10</h3>
+<ol id="top10" style="margin:0;padding-left:20px;font-size:12px;"></ol>
+</div>
+</details>
+
+<!-- ─────────── Reiter: Heatmap - Brandschutz ─────────── -->
+<details class="section" id="sec-heatmap">
+<summary>Heatmap</summary>
+<div class="section-body">
+<label>Modus: <select id="mode"><option value="cluster">Cluster</option><option value="points">Punkte</option><option value="heat">Heatmap</option></select></label>
+<label style="display:block;margin:8px 0 6px;">Heatmap-Radius: <input type="range" id="hr" min="5" max="50" value="20"> <span id="hrV">20</span></label>
+
+<h3 style="margin:12px 0 4px;font-size:12px;">Abdeckungscheck</h3>
+<div style="font-size:11px;color:#666;font-style:italic;line-height:1.35;margin-bottom:6px;padding:5px 7px;background:#f6f6f6;border-radius:3px;border-left:3px solid #888;">
+  Die Auswertung ist nur verfügbar, wenn im Reiter <b>Wachen</b> die Option „Wachen + Isochronen anzeigen" aktiviert ist.
+</div>
+<div style="font-size:12px;">Nicht abgedeckt: <span id="nc" class="badge">–</span> / <span id="tc">–</span></div>
+<div style="font-size:12px;">Quote: <span id="qt">–</span></div>
+</div>
+</details>
+
+<!-- ─────────── Reiter: Hilfsfrist - Brandschutz ─────────── -->
+<details class="section" id="sec-hf">
+<summary>Hilfsfrist</summary>
+<div class="section-body">
+<div id="hf-filter-list">
+  <div class="hf-check-row" id="hfrow-gruen"  onclick="toggleHFFilter('gruen')"><div class="hf-dot" style="background:#2ecc71;"></div><span>Beide HF erfüllt</span><span class="hf-count-badge" id="hfcnt-gruen">-</span></div>
+  <div class="hf-check-row" id="hfrow-gelb"   onclick="toggleHFFilter('gelb')"><div class="hf-dot" style="background:#f1c40f;"></div><span>Nur HF 1 erfüllt</span><span class="hf-count-badge" id="hfcnt-gelb">-</span></div>
+  <div class="hf-check-row" id="hfrow-orange" onclick="toggleHFFilter('orange')"><div class="hf-dot" style="background:#e67e22;"></div><span>Nur HF 2 erfüllt</span><span class="hf-count-badge" id="hfcnt-orange">-</span></div>
+  <div class="hf-check-row" id="hfrow-rot"    onclick="toggleHFFilter('rot')"><div class="hf-dot" style="background:#e74c3c;"></div><span>Keine HF erfüllt</span><span class="hf-count-badge" id="hfcnt-rot">-</span></div>
+  <div class="hf-check-row" id="hfrow-grau"   onclick="toggleHFFilter('grau')"><div class="hf-dot" style="background:#95a5a6;"></div><span>Keine Auswertung möglich</span><span class="hf-count-badge" id="hfcnt-grau">-</span></div>
+</div>
+<button id="toggleHF" onclick="toggleHFLayer()" style="margin:6px 0 4px;width:100%;padding:4px;font-size:12px;cursor:pointer;border-radius:3px;border:1px solid #bbb;background:#b80000;color:#fff;">HF-Layer einblenden</button>
+<div id="hf-no-data" style="font-size:11px;color:#999;padding:4px;font-style:italic;background:#fafafa;border-radius:3px;border:1px solid #eee;margin-top:4px;">
+  Testdaten aktiv (500 Dummy-Einsätze).
+</div>
+</div>
+</details>
+
+</div>
+<!-- ═════════════════ /Panel: Brandschutz ═════════════════ -->
+
+<!-- ═════════════════ Panel: Rettungsdienst ═════════════════ -->
+<div class="tab-panel" id="panel-rett">
+  <div class="tab-placeholder">
+    <div class="ph-icon">⚠️</div>
+    <b>Rettungsdienst</b><br>
+    Der Bereich befindet sich in Arbeit und wird in Kürze ergänzt.
+  </div>
+</div>
+
+<!-- ═════════════════ Panel: Katastrophenschutz ═════════════════ -->
+<div class="tab-panel" id="panel-kat">
+  <div class="tab-placeholder">
+    <div class="ph-icon">⚠️</div>
+    <b>Katastrophenschutz</b><br>
+    Der Bereich befindet sich in Arbeit und wird in Kürze ergänzt.
+  </div>
+</div>
+
+<!-- ═════════════════ Panel: Sonderlagen & Weiteres ═════════════════ -->
+<div class="tab-panel" id="panel-quer">
+
+  <!-- ─────────── Reiter: Hochwasser (HWRM-NRW) ─────────── -->
+  <details class="section" id="sec-hochwasser">
+  <summary>Hochwasser (HWRM-NRW)</summary>
+  <div class="section-body">
+
+    <div style="font-size:11.5px;color:#555;line-height:1.4;margin-bottom:8px;">
+      Offizielle Hochwassergefahren- und Risikokarten des Landes NRW (EG-HWRM-RL) als Kartenüberlagerung.
+    </div>
+
+    <div style="font-weight:bold;font-size:11.5px;color:#444;margin:6px 0 4px;">Gefahrenkarten (Überflutungsflächen)</div>
+    <label style="display:block;margin:3px 0;"><input type="checkbox" id="hwHaeufig"> HQ häufig <span style="color:#888;font-size:11px;">(alle 10–20 Jahre)</span></label>
+    <label style="display:block;margin:3px 0;"><input type="checkbox" id="hwHQ100"> HQ100 <span style="color:#888;font-size:11px;">(alle 100 Jahre, Planungsbasis)</span></label>
+    <label style="display:block;margin:3px 0;"><input type="checkbox" id="hwExtrem"> HQ extrem <span style="color:#888;font-size:11px;">(Katastrophenfall, z.B. 2021)</span></label>
+
+    <div style="font-weight:bold;font-size:11.5px;color:#444;margin:10px 0 4px;">Risikokarte</div>
+    <label style="display:block;margin:3px 0;"><input type="checkbox" id="hwRisiko"> Schutzobjekte &amp; betroffene Nutzungen</label>
+
+    <div style="margin-top:10px;">
+      <label style="display:block;font-size:11.5px;color:#444;margin-bottom:3px;">Deckkraft: <span id="hwOpacityLabel">60%</span></label>
+      <input type="range" id="hwOpacity" min="10" max="100" value="60" step="5" style="width:100%;">
+    </div>
+
+    <!-- Legenden-Container -->
+    <div id="hwLegendenBox" style="display:none;margin-top:10px;padding:6px 8px;background:#fafafa;border:1px solid #ddd;border-radius:3px;">
+      <div style="font-weight:bold;font-size:11px;color:#444;margin-bottom:4px;">Legende</div>
+      <div id="hwLegenden" style="font-size:11px;"></div>
+    </div>
+
+    <!-- Hinweis & Quelle -->
+    <div style="margin-top:10px;padding:5px 7px;background:#fff8e6;border-left:3px solid #f0c040;border-radius:2px;font-size:10.5px;color:#6b5515;line-height:1.4;">
+      <b>Hinweis:</b> Benötigt Internetverbindung. In der Offline-Variante der Karte nicht verfügbar.
+    </div>
+    <div style="font-size:10.5px;color:#888;line-height:1.4;margin-top:6px;font-style:italic;">
+      Quelle: Bezirksregierungen NRW / LANUK NRW, Datenlizenz Deutschland Namensnennung 2.0 – "Land NRW".
+      Abruf über WMS-Dienst flussgebiete.nrw.
+    </div>
+
+  </div>
+  </details>
+
+  <!-- ─────────── Reiter: AAO-Analyse ─────────── -->
+  <details class="section" id="sec-aao">
+  <summary>AAO-Analyse</summary>
+  <div class="section-body">
+
+    <div id="aaoModusHinweis" style="font-size:11px;line-height:1.4;margin-bottom:10px;padding:7px 9px;border-radius:3px;border:1px solid #ddd;background:#f6f6f6;">
+      Berechnet die nächsten Wachen per Fahrzeitrouting. Bei fehlender Internetverbindung wird automatisch auf Isochronen-Schätzwerte umgeschaltet.
+    </div>
+
+    <div style="font-size:11.5px;font-weight:bold;color:#444;margin-bottom:5px;">Suchmodus</div>
+    <div class="aao-mode-group">
+      <label class="aao-mode-opt active" id="aao-lbl-adr">
+        <input type="radio" name="aaoMode" value="adresse" checked> Adresse / Straße
+      </label>
+      <label class="aao-mode-opt" id="aao-lbl-ort">
+        <input type="radio" name="aaoMode" value="ortskern"> Ortskern
+      </label>
+      <label class="aao-mode-opt" id="aao-lbl-nr">
+        <input type="radio" name="aaoMode" value="einsatz"> Einsatznummer
+      </label>
+    </div>
+
+    <div id="aao-inp-adr">
+      <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:3px;">Adresse</div>
+      <div class="aao-input-wrap">
+        <input type="text" id="aaoAdrInput" placeholder="z.B. Bahnstraße 5, Kerpen" autocomplete="off"/>
+        <button class="aao-clr" onclick="aaoClearField('aaoAdrInput')">&#x2715;</button>
+      </div>
+    </div>
+
+    <div id="aao-inp-ort" style="display:none">
+      <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:3px;">Stadtauswahl</div>
+      <select id="aaoOrtSelect" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:3px;font-size:12px;margin-bottom:6px;box-sizing:border-box;" onchange="aaoOrtChanged()">
+        <option value="">-- Stadt wählen --</option>
+        <option value="Bedburg">Bedburg</option>
+        <option value="Bergheim">Bergheim</option>
+        <option value="Brühl">Brühl</option>
+        <option value="Elsdorf">Elsdorf</option>
+        <option value="Erftstadt">Erftstadt</option>
+        <option value="Frechen">Frechen</option>
+        <option value="Hürth">Hürth</option>
+        <option value="Kerpen">Kerpen</option>
+        <option value="Pulheim">Pulheim</option>
+        <option value="Wesseling">Wesseling</option>
+      </select>
+      <div id="aaoStadtteilWrap" style="display:none">
+        <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:3px;">Stadtteil (optional)</div>
+        <select id="aaoStadtteilSelect" style="width:100%;padding:6px;border:1px solid #ccc;border-radius:3px;font-size:12px;margin-bottom:8px;box-sizing:border-box;">
+          <option value="">-- Ortskern der Stadt --</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="aao-inp-nr" style="display:none">
+      <div style="font-size:11px;font-weight:600;color:#666;margin-bottom:3px;">Einsatznummer</div>
+      <div style="position:relative;margin-bottom:8px;">
+        <input type="text" id="aaoNrInput" placeholder="Einsatz-Nr. suchen…" autocomplete="off"
+          style="width:100%;box-sizing:border-box;padding:6px 26px 6px 8px;border:1px solid #ccc;border-radius:3px;font-size:12px;"/>
+        <button id="aaoNrClear" title="Löschen" onclick="aaoClearField('aaoNrInput')"
+          style="position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:13px;color:#999;padding:0;line-height:1;display:none;">&#x2715;</button>
+        <div id="aaoNrSugg" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ccc;border-top:none;border-radius:0 0 3px 3px;max-height:180px;overflow-y:auto;z-index:2000;font-size:12px;box-shadow:0 2px 4px rgba(0,0,0,0.1);"></div>
+      </div>
+      <div class="aao-eins-info" id="aaoEinsInfo"></div>
+    </div>
+
+    <div style="font-size:11.5px;font-weight:bold;color:#444;margin-bottom:5px;">Fahrprofil</div>
+    <div class="aao-profile-group">
+      <button class="aao-prof-btn" id="aao-btn-pkw" onclick="aaoSetProfile('pkw')">PKW</button>
+      <button class="aao-prof-btn active" id="aao-btn-lkw" onclick="aaoSetProfile('lkw')">LKW</button>
+    </div>
+
+    <div class="aao-count-row">
+      <label>Anzahl Wachen:</label>
+      <select id="aaoCount">
+        <option value="5">5</option>
+        <option value="10" selected>10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+      </select>
+    </div>
+
+    <button class="aao-calc-btn" id="aaoCalcBtn" onclick="aaoBerechnen()">Berechnen</button>
+    <button class="aao-reset-btn" onclick="aaoReset()">Zurücksetzen</button>
+
+    <div class="aao-status" id="aaoStatus"></div>
+    <div class="aao-results" id="aaoResults"></div>
+    <button class="aao-toggle-btn" id="aaoToggleBtn" onclick="aaoToggleRoutes()">Routen ausblenden</button>
+
+  </div>
+  </details>
+
+</details>
+
+</div><!-- /panel-quer -->
+
+<!-- ─────────── Datengrundlage-Hinweis (immer sichtbar unten) ─────────── -->
+<div style="font-size:11px;color:#888;line-height:1.4;margin:8px 0 6px;font-style:italic;padding:0 4px;">
+  Datengrundlage: Einsatzleitsystem der Kreisleitstelle Rhein-Erft-Kreis.
+</div>
+
+<hr style="border:none;border-top:1px solid #aaa;margin:8px 0 6px 0;">
+<div style="font-size:10.5px;color:#888;line-height:1.5;">
+  <div>© Rhein-Erft-Kreis, Erstellt durch: Amt 38/2 Brand- und Bevölkerungsschutz</div>
+  <div>Jürgen Schweinsburg / 38/21 – Brandschutz</div>
+</div>
+<hr style="border:none;border-top:1px solid #ddd;margin:8px 0 6px 0;">
+<div style="font-size:11px;font-weight:600;color:#444;margin-bottom:3px;">Hintergrundkarte</div>
+<select id="tileDropdown" onchange="switchTile(this.value)">
+  <option value="osm" selected>OpenStreetMap</option>
+  <option value="basemap-farbe">basemap.de Web Raster (Farbe)</option>
+</select>
+<div style="font-size:10px;color:#aaa;margin-top:4px;">© GeoBasis-DE / BKG (2024) – <a href="https://basemap.de" target="_blank" style="color:#aaa;">basemap.de</a></div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="https://unpkg.com/@turf/turf@7.1.0/turf.min.js"></script>
+<!-- SheetJS für Excel-Verarbeitung -->
+<script src="https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// DATEN-LOADER: Liest Einsatzdaten aus Excel/CSV + lädt statische Daten
+// ═══════════════════════════════════════════════════════════════════════════
+var DATA = null;
+
+function setStatus(msg, color) {
+  var el = document.getElementById('upload-status');
+  if (el) { el.textContent = msg; el.style.color = color || '#888'; }
+}
+
+function setProgress(pct) {
+  var bar = document.getElementById('progress-bar');
+  var wrap = document.getElementById('upload-progress');
+  if (wrap) wrap.style.display = 'block';
+  if (bar) bar.style.width = pct + '%';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  var el = document.getElementById('drop-zone');
+  el.style.borderColor = '#cbd5e0'; el.style.background = '#f8fafc';
+  var file = e.dataTransfer.files[0];
+  if (file) handleFileSelect(file);
+}
+
+function handleFileSelect(file) {
+  if (!file) return;
+  var ext = file.name.split('.').pop().toLowerCase();
+  if (!['xlsx','xls','csv'].includes(ext)) {
+    setStatus('Nicht unterstütztes Format. Bitte .xlsx, .xls oder .csv verwenden.', '#c0392b');
+    return;
+  }
+  setStatus('Datei wird gelesen…');
+  setProgress(10);
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    setProgress(30);
+    setStatus('Einsatzdaten werden verarbeitet…');
+    setTimeout(function() {
+      try {
+        var incidents;
+        if (ext === 'csv') {
+          incidents = parseCSV(e.target.result);
+        } else {
+          var wb = XLSX.read(e.target.result, {type:'array'});
+          var ws = wb.Sheets[wb.SheetNames[0]];
+          var rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+          incidents = parseRows(rows);
+        }
+        setProgress(60);
+        setStatus('Statische Daten werden geladen…');
+        loadStaticData(incidents);
+      } catch(err) {
+        setStatus('Fehler beim Lesen der Datei: ' + err.message, '#c0392b');
+        setProgress(0);
+        console.error(err);
+      }
+    }, 50);
+  };
+  if (ext === 'csv') reader.readAsText(file, 'UTF-8');
+  else reader.readAsArrayBuffer(file);
+}
+
+function parseRows(rows) {
+  // Spalten-Mapping (flexibel – erkennt verschiedene Bezeichnungen)
+  var colMap = {
+    lat:   ['Latitude','latitude','lat','Breite'],
+    lon:   ['Longitude','longitude','lon','lng','Länge'],
+    nr:    ['Einsatz-Nr.','Einsatz-Nr','EinsatzNr','Nr','nr','Nummer'],
+    ort:   ['Ort','ort','Stadt','Gemeinde'],
+    st:    ['Stadtteil','stadtteil','Ortsteil'],
+    ad:    ['Adresse','adresse','Straße','Strasse'],
+    hn:    ['Haus-Nr.','Haus-Nr','HausNr','Hausnummer'],
+    sw:    ['Stichwort','stichwort','Einsatzart'],
+    dt:    ['Datum','datum','Date'],
+    ob:    ['Objekt','objekt','Objektname'],
+  };
+  function findCol(row, keys) {
+    var cols = Object.keys(row);
+    for (var k of keys) {
+      var found = cols.find(c => c.trim().toLowerCase() === k.toLowerCase());
+      if (found) return found;
+    }
+    // Fallback: enthält
+    for (var k of keys) {
+      var found = cols.find(c => c.toLowerCase().includes(k.toLowerCase()));
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!rows.length) return [];
+  var sample = rows[0];
+  var cols = {};
+  Object.keys(colMap).forEach(function(field) {
+    cols[field] = findCol(sample, colMap[field]);
+  });
+
+  return rows.map(function(row) {
+    var lat = parseFloat(row[cols.lat]);
+    var lon = parseFloat(row[cols.lon]);
+    if (isNaN(lat) || isNaN(lon)) return null;
+    var dt = String(row[cols.dt] || '');
+    var yr = parseInt(dt.split('.').pop()) || new Date().getFullYear();
+    var mo = dt.split('.')[1] ? ['','Jan','Feb','Mrz','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'][parseInt(dt.split('.')[1])] : '';
+    return {
+      lat: lat, lon: lon,
+      nr:  String(row[cols.nr]  || ''),
+      ort: String(row[cols.ort] || ''),
+      st:  String(row[cols.st]  || ''),
+      ad:  String(row[cols.ad]  || ''),
+      hn:  String(row[cols.hn]  || ''),
+      sw:  String(row[cols.sw]  || '').toUpperCase(),
+      dt:  dt,
+      yr:  yr,
+      mo:  mo,
+      ob:  String(row[cols.ob]  || ''),
+    };
+  }).filter(Boolean);
+}
+
+function parseCSV(text) {
+  var lines = text.split('\n').filter(Boolean);
+  if (!lines.length) return [];
+  var sep = lines[0].includes(';') ? ';' : ',';
+  var headers = lines[0].split(sep).map(h => h.trim().replace(/^"|"$/g,''));
+  var rows = lines.slice(1).map(function(line) {
+    var vals = line.split(sep).map(v => v.trim().replace(/^"|"$/g,''));
+    var obj = {};
+    headers.forEach(function(h,i) { obj[h] = vals[i] || ''; });
+    return obj;
+  });
+  return parseRows(rows);
+}
+
+function loadStaticData(incidents) {
+  setProgress(70);
+  // Isochrones + Wachen parallel laden
+  Promise.all([
+    fetch('data/isochrones.json').then(r => r.json()),
+    fetch('data/wachen.json').then(r => r.json()),
+  ]).then(function(results) {
+    setProgress(90);
+    DATA = {
+      stations:   results[1],
+      incidents:  incidents,
+      isochrones: results[0],
+    };
+    setProgress(100);
+    setStatus(incidents.length + ' Einsätze geladen ✓', '#276749');
+    setTimeout(function() {
+      document.getElementById('upload-overlay').style.display = 'none';
+      initKarte();
+    }, 800);
+  }).catch(function(err) {
+    setStatus('Fehler beim Laden der Kartendaten: ' + err.message, '#c0392b');
+    console.error(err);
+  });
+}
+
+function startOhneEinsatzdaten() {
+  setStatus('Lade Kartendaten…');
+  setProgress(50);
+  Promise.all([
+    fetch('data/isochrones.json').then(r => r.json()),
+    fetch('data/wachen.json').then(r => r.json()),
+  ]).then(function(results) {
+    DATA = { stations: results[1], incidents: [], isochrones: results[0] };
+    setProgress(100);
+    setTimeout(function() {
+      document.getElementById('upload-overlay').style.display = 'none';
+      initKarte();
+    }, 400);
+  });
+}
+
+function initKarte() {
+  // karte.js einbinden (nach DATA-Initialisierung)
+  var s = document.createElement('script');
+  s.src = 'js/karte.js';
+  document.body.appendChild(s);
+}
+</script>
+
+</body>
+</html>
